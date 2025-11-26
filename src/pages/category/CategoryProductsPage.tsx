@@ -14,7 +14,6 @@ const CategoryProductsPage = () => {
     const fetchCategoryProducts = async () => {
       try {
         setLoading(true);
-        // First get the category details to get the name
         const categories = await apiClient.getAllCategories({
           where: `slug(en-US="${categorySlug}")`,
         });
@@ -41,7 +40,10 @@ const CategoryProductsPage = () => {
   return (
     <div className="category-products-container">
       <h1 className="category-title">{categoryName}</h1>
-      <ProductCatalog categoryId={categoryId} />
+      <ProductCatalog
+        categoryId={categoryId}
+        propsArgs={{ limit: 10, offset: 0, sort: "createdAt desc" }}
+      />
     </div>
   );
 };
