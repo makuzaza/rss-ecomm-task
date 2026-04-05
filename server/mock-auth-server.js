@@ -366,15 +366,27 @@ app.get("/api/auth/get-cart", auth, async (req, res) => {
   }
 });
 
-mongoose
-  .connect(mongoUri, { serverSelectionTimeoutMS: 15000 })
-  .then(() => {
-    app.listen(port, () => {
-      console.error(`Mock auth server listening on port ${port}`);
-    });
-  })
-  .catch((err) => {
+const RETRY_DELAY_MS = 10000;
+
+const connectMongoWithRetry = async () => {
+  try {
+    await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 15000 });
+    console.error("MongoDB connected successfully.");
+  } catch (err) {
     console.error("MongoDB connection failed:", err.message);
     console.error("MongoDB connection error details:", err);
-    process.exit(1);
-  });
+    console.error(`Retrying MongoDB connection in ${RETRY_DELAY_MS / 1000}s...`);
+    setTimeout(connectMongoWithRetry, RETRY_DELAY_MS);
+  }
+};
+
+const server = app.listen(port, "0.0.0.0", () => {
+  console.error(`Mock auth server listening on port ${port}`);
+});
+
+server.on("error", (err) => {
+  console.error("HTTP server failed to start:", err);
+  process.exit(1);
+});
+
+connectMongoWithRetry();
