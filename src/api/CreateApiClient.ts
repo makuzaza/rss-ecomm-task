@@ -12,8 +12,18 @@ import {
 } from "@commercetools/platform-sdk";
 
 class CreateApiClient {
+  protected readonly HAS_CTP_CONFIG = Boolean(
+    process.env.REACT_APP_BASE_URL
+      && process.env.REACT_APP_OAUTH_URL
+      && process.env.REACT_APP_PROJECT_KEY
+      && process.env.REACT_APP_ADMIN_CLIENT_ID
+      && process.env.REACT_APP_ADMIN_CLIENT_SECRET
+      && process.env.REACT_APP_SPA_CLIENT_ID
+      && process.env.REACT_APP_SPA_CLIENT_SECRET,
+  );
+
   protected readonly USE_MOCK_DATA =
-    process.env.REACT_APP_USE_MOCK_DATA === "true";
+    process.env.REACT_APP_USE_MOCK_DATA === "true" || !this.HAS_CTP_CONFIG;
 
   protected BASE_URI = process.env.REACT_APP_BASE_URL || "";
   protected OAUTH_URI = process.env.REACT_APP_OAUTH_URL || "";
@@ -36,6 +46,12 @@ class CreateApiClient {
   protected apiRoot!: ApiRoot;
 
   constructor() {
+    if (!this.HAS_CTP_CONFIG && process.env.REACT_APP_USE_MOCK_DATA !== "true") {
+      console.warn(
+        "Commercetools config is incomplete. Falling back to mock mode.",
+      );
+    }
+
     if (this.USE_MOCK_DATA) {
       this.defaultClient = {} as Client;
       this.client = {} as Client;

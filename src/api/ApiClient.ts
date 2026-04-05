@@ -64,7 +64,17 @@ type MockCustomerRecord = {
   password: string;
 };
 
-const MOCK_MODE = process.env.REACT_APP_USE_MOCK_DATA === "true";
+const HAS_CTP_CONFIG = Boolean(
+  process.env.REACT_APP_BASE_URL
+    && process.env.REACT_APP_OAUTH_URL
+    && process.env.REACT_APP_PROJECT_KEY
+    && process.env.REACT_APP_ADMIN_CLIENT_ID
+    && process.env.REACT_APP_ADMIN_CLIENT_SECRET
+    && process.env.REACT_APP_SPA_CLIENT_ID
+    && process.env.REACT_APP_SPA_CLIENT_SECRET,
+);
+
+const MOCK_MODE = process.env.REACT_APP_USE_MOCK_DATA === "true" || !HAS_CTP_CONFIG;
 const USE_MOCK_AUTH_DB = process.env.REACT_APP_USE_MOCK_AUTH_DB === "true";
 const MOCK_AUTH_API_URL = process.env.REACT_APP_MOCK_AUTH_API_URL || "";
 const MOCK_USERS_STORAGE_KEY = "mockUsers";
