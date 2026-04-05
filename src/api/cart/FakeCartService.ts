@@ -111,7 +111,8 @@ export class FakeCartService implements ICartService {
 
     return toCart(this.recalculateTotals(cart));
   }
-
+  
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async createCart(_customer?: Customer): Promise<Cart> {
     const cart = makeEmptyCart();
     this.writeCart(cart);
@@ -124,7 +125,7 @@ export class FakeCartService implements ICartService {
       throw new Error("Cart not found");
     }
 
-    let nextCart: MockCart = {
+    const nextCart: MockCart = {
       ...cart,
       version: cart.version + 1,
       lineItems: [...cart.lineItems],
