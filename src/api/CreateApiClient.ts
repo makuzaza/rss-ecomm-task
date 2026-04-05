@@ -10,30 +10,38 @@ import {
   createApiBuilderFromCtpClient,
   ApiRoot,
 } from "@commercetools/platform-sdk";
-import { v4 as uuidv4 } from "uuid";
 
 class CreateApiClient {
-  protected BASE_URI = process.env.REACT_APP_BASE_URL;
-  protected OAUTH_URI = process.env.REACT_APP_OAUTH_URL;
-  protected PROJECT_KEY = process.env.REACT_APP_PROJECT_KEY;
+  protected readonly USE_MOCK_DATA =
+    process.env.REACT_APP_USE_MOCK_DATA === "true";
+
+  protected BASE_URI = process.env.REACT_APP_BASE_URL || "";
+  protected OAUTH_URI = process.env.REACT_APP_OAUTH_URL || "";
+  protected PROJECT_KEY = process.env.REACT_APP_PROJECT_KEY || "";
 
   protected readonly ADMIN_CREDENTIALS = {
     // ADMIN CLIENT (SCOPE)
-    clientId: process.env.REACT_APP_ADMIN_CLIENT_ID,
-    clientSecret: process.env.REACT_APP_ADMIN_CLIENT_SECRET,
+    clientId: process.env.REACT_APP_ADMIN_CLIENT_ID || "",
+    clientSecret: process.env.REACT_APP_ADMIN_CLIENT_SECRET || "",
   };
 
   protected readonly SPA_CREDENTIALS = {
     // SPA CLIENT (SCOPE)
-    clientId: process.env.REACT_APP_SPA_CLIENT_ID,
-    clientSecret: process.env.REACT_APP_SPA_CLIENT_SECRET,
+    clientId: process.env.REACT_APP_SPA_CLIENT_ID || "",
+    clientSecret: process.env.REACT_APP_SPA_CLIENT_SECRET || "",
   };
 
-  protected defaultClient: Client;
-  protected client: Client;
-  protected apiRoot: ApiRoot;
+  protected defaultClient!: Client;
+  protected client!: Client;
+  protected apiRoot!: ApiRoot;
 
   constructor() {
+    if (this.USE_MOCK_DATA) {
+      this.defaultClient = {} as Client;
+      this.client = {} as Client;
+      return;
+    }
+
     this.defaultClient = this.buildDefaultClient(true);
   }
   // API ROOT
@@ -112,7 +120,10 @@ class CreateApiClient {
     const key = "anonymous_id";
     let id = localStorage.getItem(key);
     if (!id) {
-      id = uuidv4();
+      id =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `anon-${Date.now()}-${Math.random().toString(16).slice(2)}`;
       localStorage.setItem(key, id);
     }
     return id;

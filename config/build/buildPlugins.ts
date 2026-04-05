@@ -1,5 +1,6 @@
 import { Configuration } from "webpack";
 import path from "path";
+import fs from "fs";
 import HtmlWebpackPlugin from "html-webpack-plugin";
 import MiniCssExtractPlugin from "mini-css-extract-plugin";
 // import CopyPlugin from "copy-webpack-plugin";
@@ -14,8 +15,11 @@ export function buildPlugins({
   paths,
   analyzer,
 }: BuildOptions): Configuration["plugins"] {
-  // const isDev = mode === "development";
+  const isDev = mode === "development";
   const isProd = mode === "production";
+
+  const devLocalEnvPath = "./.env.development.local";
+  const envPath = isDev && fs.existsSync(devLocalEnvPath) ? devLocalEnvPath : "./.env";
 
   const plugins: Configuration["plugins"] = [
     new HtmlWebpackPlugin({
@@ -23,7 +27,7 @@ export function buildPlugins({
       favicon: path.resolve(paths.public, "favicon.ico"),
     }),
     new Dotenv({
-      path: `./.env`,
+      path: envPath,
     }),
   ];
   // if (isDev) {

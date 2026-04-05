@@ -4,6 +4,13 @@ import {
   productDataNormalization,
   productSearchNormalization,
 } from "@/utils/dataNormalization";
+import {
+  getMockCategories,
+  getMockProductByKey,
+  getMockProducts,
+  searchMockProductsByCategory,
+  searchMockProductsByName,
+} from "@/api/mock/mockData";
 
 // types
 import {
@@ -21,6 +28,7 @@ import {
   SearchTypes,
   type CommerceToolsError,
   type MyProductsData,
+  TokenStore as AppTokenStore,
 } from "../@types/interfaces";
 import {
   AuthMiddlewareOptions,
@@ -33,10 +41,125 @@ interface AnonymousAuthOptions extends AuthMiddlewareOptions {
   anonymousId: string;
   fetch: typeof fetch;
 }
+
+type TokenStoreLike = TokenStore | AppTokenStore;
+
+type MockCustomerRecord = {
+  id: string;
+  version: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth?: string;
+  addresses?: Array<{
+    id?: string;
+    streetName?: string;
+    postalCode?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+  }>;
+  defaultShippingAddressId?: string;
+  defaultBillingAddressId?: string;
+  password: string;
+};
+
+const MOCK_MODE = process.env.REACT_APP_USE_MOCK_DATA === "true";
+const MOCK_USERS_STORAGE_KEY = "mockUsers";
+const MOCK_CURRENT_CUSTOMER_KEY = "mockCurrentCustomer";
 export class ApiClient extends CreateApiClient {
   constructor() {
     super();
-    this.getAllCarts();
+    if (!MOCK_MODE) {
+      this.getAllCarts();
+    }
+  }
+
+  public isMockMode(): boolean {
+    return MOCK_MODE;
+  }
+
+  private readMockUsers(): MockCustomerRecord[] {
+    const raw = localStorage.getItem(MOCK_USERS_STORAGE_KEY);
+    if (!raw) {
+      const seededUsers: MockCustomerRecord[] = [
+        {
+          id: "mock-customer-demo",
+          version: 1,
+          email: "demo@shop.local",
+          firstName: "Demo",
+          lastName: "User",
+          dateOfBirth: "1995-01-01",
+          addresses: [
+            {
+              id: "addr-demo-1",
+              streetName: "Mock Street 1",
+              postalCode: "00100",
+              city: "Helsinki",
+              country: "FI",
+            },
+          ],
+          defaultShippingAddressId: "addr-demo-1",
+          defaultBillingAddressId: "addr-demo-1",
+          password: "Demo123!",
+        },
+      ];
+
+      this.writeMockUsers(seededUsers);
+      return seededUsers;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as MockCustomerRecord[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeMockUsers(users: MockCustomerRecord[]): void {
+    localStorage.setItem(MOCK_USERS_STORAGE_KEY, JSON.stringify(users));
+  }
+
+  private toCustomer(record: MockCustomerRecord): Customer {
+    return {
+      id: record.id,
+      version: record.version,
+      email: record.email,
+      firstName: record.firstName,
+      lastName: record.lastName,
+      dateOfBirth: record.dateOfBirth,
+      addresses: record.addresses || [],
+      defaultShippingAddressId: record.defaultShippingAddressId,
+      defaultBillingAddressId: record.defaultBillingAddressId,
+    } as Customer;
+  }
+
+  private saveMockSession(email: string): void {
+    const token: AppTokenStore = {
+      token: `mock-token-${email}`,
+      expirationTime: Date.now() + 24 * 60 * 60 * 1000,
+    };
+
+    localStorage.setItem("accessToken", JSON.stringify(token));
+    localStorage.setItem(MOCK_CURRENT_CUSTOMER_KEY, email);
+  }
+
+  private getMockCurrentCustomerRecord(): MockCustomerRecord | null {
+    const currentEmail = localStorage.getItem(MOCK_CURRENT_CUSTOMER_KEY);
+    if (!currentEmail) return null;
+
+    const users = this.readMockUsers();
+    return users.find((user) => user.email === currentEmail) || null;
+  }
+
+  private updateMockCustomerRecord(updated: MockCustomerRecord): void {
+    const users = this.readMockUsers();
+    const nextUsers = users.map((user) =>
+      user.email === updated.email || user.id === updated.id ? updated : user,
+    );
+    this.writeMockUsers(nextUsers);
+    localStorage.setItem(MOCK_CURRENT_CUSTOMER_KEY, updated.email);
   }
   /**
    * BUILD CUSTOMER WITH PASSWORD
@@ -45,6 +168,20 @@ export class ApiClient extends CreateApiClient {
     email: string,
     password: string,
   ): Promise<Customer> {
+    if (MOCK_MODE) {
+      const users = this.readMockUsers();
+      const matched = users.find(
+        (user) => user.email === email && user.password === password,
+      );
+
+      if (!matched) {
+        throw new Error("Invalid email or password");
+      }
+
+      this.saveMockSession(matched.email);
+      return this.toCustomer(matched);
+    }
+
     try {
       this.client = this.buildClientWithPassword(email, password);
       const apiRoot = this.getApiRootSafe();
@@ -55,7 +192,7 @@ export class ApiClient extends CreateApiClient {
         .get()
         .execute();
 
-      return response.body;
+      return response.body as Customer;
     } catch (error: unknown) {
       console.error("Failed to get customer with password:", error);
 
@@ -89,6 +226,23 @@ export class ApiClient extends CreateApiClient {
    * BUILD CUSTOMER WITH TOKEN
    */
   public async getCustomerWithToken(token: string) {
+    if (MOCK_MODE) {
+      if (!token?.startsWith("mock-token-")) {
+        throw new Error("Failed to fetch customer by token");
+      }
+
+      const email = token.replace("mock-token-", "");
+      const users = this.readMockUsers();
+      const matched = users.find((user) => user.email === email);
+
+      if (!matched) {
+        throw new Error("Failed to fetch customer by token");
+      }
+
+      this.saveMockSession(matched.email);
+      return this.toCustomer(matched);
+    }
+
     this.client = this.buildClientWithToken(token);
     const apiRoot = this.getApiRootSafe();
 
@@ -109,6 +263,12 @@ export class ApiClient extends CreateApiClient {
    * SIGN IN CUSTOMER
    */
   public async loginCustomer(customerData: MyCustomerDraft) {
+    if (MOCK_MODE) {
+      const email = customerData.email;
+      const password = customerData.password || "mock-password";
+      return this.getCustomerWithPassword(email, password);
+    }
+
     const apiRoot = this.getApiRoot(this.defaultClient);
 
     try {
@@ -134,6 +294,44 @@ export class ApiClient extends CreateApiClient {
   public async registerCustomer(
     customerData: MyCustomerDraft,
   ): Promise<CustomerSignInResult> {
+    if (MOCK_MODE) {
+      const users = this.readMockUsers();
+      const exists = users.some((user) => user.email === customerData.email);
+
+      if (exists) {
+        throw new Error("A customer with this email already exists.");
+      }
+
+      const addresses = (customerData.addresses || []).map((address, index) => ({
+        id: address.id || `addr-${Date.now()}-${index}`,
+        streetName: address.streetName,
+        postalCode: address.postalCode,
+        city: address.city,
+        state: address.state,
+        country: address.country,
+      }));
+
+      const newUser: MockCustomerRecord = {
+        id: `mock-customer-${Date.now()}`,
+        version: 1,
+        email: customerData.email,
+        firstName: customerData.firstName || "Demo",
+        lastName: customerData.lastName || "User",
+        dateOfBirth: customerData.dateOfBirth,
+        addresses,
+        defaultShippingAddressId: addresses[customerData.defaultShippingAddress || 0]?.id,
+        defaultBillingAddressId: addresses[customerData.defaultBillingAddress || 0]?.id,
+        password: customerData.password || "mock-password",
+      };
+
+      this.writeMockUsers([...users, newUser]);
+      this.saveMockSession(newUser.email);
+
+      return {
+        customer: this.toCustomer(newUser),
+      } as CustomerSignInResult;
+    }
+
     const client = this.buildDefaultClient(false);
     this.apiRoot = this.getApiRoot(client);
 
@@ -167,6 +365,15 @@ export class ApiClient extends CreateApiClient {
    * GET CUSTOMER PROFILE
    */
   public async getCustomerProfile() {
+    if (MOCK_MODE) {
+      const customer = this.getMockCurrentCustomerRecord();
+      if (!customer) {
+        throw new Error("Unauthorized action");
+      }
+
+      return this.toCustomer(customer);
+    }
+
     const apiRoot = this.getApiRoot(this.client);
     if (!apiRoot) throw new Error("Unauthorized action");
 
@@ -192,6 +399,10 @@ export class ApiClient extends CreateApiClient {
     sort?: string;
     where?: string;
   }): Promise<CategoryPagedQueryResponse> {
+    if (MOCK_MODE) {
+      return getMockCategories(args);
+    }
+
     const apiRoot = this.getApiRoot(this.defaultClient);
     try {
       const { body: data } = await apiRoot
@@ -204,6 +415,13 @@ export class ApiClient extends CreateApiClient {
       return data;
     } catch (error) {
       console.log(error);
+      return {
+        limit: args?.limit ?? 0,
+        offset: 0,
+        count: 0,
+        total: 0,
+        results: [],
+      } as CategoryPagedQueryResponse;
     }
   }
   /**
@@ -215,6 +433,10 @@ export class ApiClient extends CreateApiClient {
     sort?: string | string[];
     offset?: number;
   }): Promise<{ products: MyProductsData[]; total: number }> {
+    if (MOCK_MODE) {
+      return getMockProducts(args);
+    }
+
     const apiRoot = this.getApiRoot(this.defaultClient);
     try {
       const { body: data }: { body: ProductProjectionPagedQueryResponse } =
@@ -225,7 +447,7 @@ export class ApiClient extends CreateApiClient {
           .execute();
 
       const normalized = productProjectionNormalization(data);
-      return { products: normalized, total: data.total };
+      return { products: normalized, total: data.total ?? normalized.length };
     } catch (error) {
       console.log(error);
       return { products: [], total: 0 };
@@ -235,6 +457,14 @@ export class ApiClient extends CreateApiClient {
    * GET PRODUCT WITH KEY
    */
   public async getProduct(key: string): Promise<MyProductsData> {
+    if (MOCK_MODE) {
+      const product = getMockProductByKey(key);
+      if (!product) {
+        throw new Error("Product not found");
+      }
+      return product;
+    }
+
     const apiRoot = this.getApiRoot(this.defaultClient);
     try {
       const { body: data } = await apiRoot
@@ -249,6 +479,7 @@ export class ApiClient extends CreateApiClient {
       return productDataNormalization(data);
     } catch (error) {
       console.log(error);
+      throw new Error("Product not found");
     }
   }
   /**
@@ -328,6 +559,14 @@ export class ApiClient extends CreateApiClient {
     searchType: SearchTypes,
     searchValue: string,
   ): Promise<MyProductsData[]> {
+    if (MOCK_MODE) {
+      if (searchType === "name") {
+        return searchMockProductsByName(searchValue);
+      }
+
+      return searchMockProductsByCategory(searchValue);
+    }
+
     const apiRoot = this.getApiRoot(this.defaultClient);
 
     let searchArgs = {};
@@ -351,9 +590,10 @@ export class ApiClient extends CreateApiClient {
           queryArgs: searchArgs,
         })
         .execute();
-      return productSearchNormalization(data);
+      return productSearchNormalization(data) as MyProductsData[];
     } catch (error) {
       console.log(error);
+      return [];
     }
   }
 
@@ -363,6 +603,72 @@ export class ApiClient extends CreateApiClient {
   public async updateCustomer(
     updatePayload: MyCustomerUpdate,
   ): Promise<Customer> {
+    if (MOCK_MODE) {
+      const current = this.getMockCurrentCustomerRecord();
+      if (!current) throw new Error("Unauthorized action");
+
+      const actions = (updatePayload.actions || []) as Array<{
+        action: string;
+        firstName?: string;
+        lastName?: string;
+        dateOfBirth?: string;
+        email?: string;
+        addressId?: string;
+        address?: {
+          id?: string;
+          streetName?: string;
+          postalCode?: string;
+          city?: string;
+          state?: string;
+          country?: string;
+        };
+      }>;
+
+      const next = {
+        ...current,
+        version: current.version + 1,
+        addresses: [...(current.addresses || [])],
+      };
+
+      for (const action of actions) {
+        if (action.action === "setFirstName" && action.firstName) {
+          next.firstName = action.firstName;
+        }
+        if (action.action === "setLastName" && action.lastName) {
+          next.lastName = action.lastName;
+        }
+        if (action.action === "setDateOfBirth" && action.dateOfBirth) {
+          next.dateOfBirth = action.dateOfBirth;
+        }
+        if (action.action === "changeEmail" && action.email) {
+          next.email = action.email;
+        }
+        if (action.action === "changeAddress" && action.addressId && action.address) {
+          next.addresses = (next.addresses || []).map((address) =>
+            address.id === action.addressId ? { ...address, ...action.address } : address,
+          );
+        }
+        if (action.action === "addAddress" && action.address) {
+          next.addresses = [
+            ...(next.addresses || []),
+            {
+              ...action.address,
+              id: action.address.id || `addr-${Date.now()}`,
+            },
+          ];
+        }
+        if (action.action === "setDefaultShippingAddress") {
+          next.defaultShippingAddressId = action.addressId;
+        }
+        if (action.action === "setDefaultBillingAddress") {
+          next.defaultBillingAddressId = action.addressId;
+        }
+      }
+
+      this.updateMockCustomerRecord(next);
+      return this.toCustomer(next);
+    }
+
     const apiRoot = this.getApiRoot(this.client);
     if (!apiRoot) throw new Error("Unauthorized action");
 
@@ -376,6 +682,7 @@ export class ApiClient extends CreateApiClient {
       return data;
     } catch (error) {
       console.log(error);
+      throw new Error("Failed to update customer");
     }
   }
 
@@ -384,6 +691,24 @@ export class ApiClient extends CreateApiClient {
     newPassword: string,
     version: number,
   ) {
+    if (MOCK_MODE) {
+      const current = this.getMockCurrentCustomerRecord();
+      if (!current) throw new Error("Unauthorized action");
+
+      if (current.password !== currentPassword) {
+        throw new Error("InvalidCurrentPassword");
+      }
+
+      const updated: MockCustomerRecord = {
+        ...current,
+        version: Math.max(version + 1, current.version + 1),
+        password: newPassword,
+      };
+
+      this.updateMockCustomerRecord(updated);
+      return;
+    }
+
     const apiRoot = this.getApiRoot(this.client);
 
     await apiRoot
@@ -529,6 +854,10 @@ export class ApiClient extends CreateApiClient {
   }
 
   public initAnonymousClient() {
+    if (MOCK_MODE) {
+      return;
+    }
+
     const anonymousId = this.getOrCreateAnonymousId();
 
     const options: AnonymousAuthOptions = {
@@ -542,9 +871,11 @@ export class ApiClient extends CreateApiClient {
       ],
       anonymousId,
       tokenCache: {
-        get: (): TokenStore | null => {
+        get: (): TokenStoreLike => {
           const cached = localStorage.getItem("accessToken");
-          return cached ? JSON.parse(cached) : null;
+          return cached
+            ? (JSON.parse(cached) as TokenStoreLike)
+            : ({ token: "", expirationTime: 0 } as TokenStoreLike);
         },
         set: (cache: TokenStore): void => {
           localStorage.setItem("accessToken", JSON.stringify(cache));
@@ -565,6 +896,10 @@ export class ApiClient extends CreateApiClient {
    */
 
   public initClientFromStorage() {
+    if (MOCK_MODE) {
+      return;
+    }
+
     const raw = localStorage.getItem("accessToken");
 
     if (raw) {
@@ -687,6 +1022,12 @@ export class ApiClient extends CreateApiClient {
 
   public logout() {
     localStorage.removeItem("accessToken");
+    localStorage.removeItem(MOCK_CURRENT_CUSTOMER_KEY);
+
+    if (MOCK_MODE) {
+      return;
+    }
+
     this.initAnonymousClient();
   }
 

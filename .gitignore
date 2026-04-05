@@ -140,3 +140,5 @@ build/
 
 # Environment Variables
 .env*
+
+rs-scholl_new_school.env

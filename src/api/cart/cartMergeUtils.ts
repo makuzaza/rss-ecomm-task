@@ -3,6 +3,10 @@ import { apiClient } from "@/api/ApiClient";
 
 export const mergeAnonymousCartWithCustomerCart =
   async (): Promise<Cart | null> => {
+    if (apiClient.isMockMode()) {
+      return null;
+    }
+
     const anonymousCartId = localStorage.getItem("anonymousCartId");
     if (!anonymousCartId) return null;
 
