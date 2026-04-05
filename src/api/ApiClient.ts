@@ -75,7 +75,7 @@ const HAS_CTP_CONFIG = Boolean(
 );
 
 const MOCK_MODE = process.env.REACT_APP_USE_MOCK_DATA === "true" || !HAS_CTP_CONFIG;
-const USE_MOCK_AUTH_DB = process.env.REACT_APP_USE_MOCK_AUTH_DB === "true";
+const USE_MOCK_AUTH_DB = process.env.REACT_APP_USE_MOCK_AUTH_DB !== "false";
 const MOCK_AUTH_API_URL = process.env.REACT_APP_MOCK_AUTH_API_URL || "";
 const MOCK_USERS_STORAGE_KEY = "mockUsers";
 const MOCK_CURRENT_CUSTOMER_KEY = "mockCurrentCustomer";
