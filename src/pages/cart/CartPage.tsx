@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useCart } from "@/context/CartContext";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { FaTrash, FaPlus, FaMinus } from "react-icons/fa";
 import "./CartPage.css";
 import { HandleQuantityChange } from "@/@types/interfaces";
+import { useAuth } from "@/context/AuthContext";
 
 const CartPage = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuth } = useAuth();
   const {
     cart,
     cartItems,
@@ -21,6 +25,7 @@ const CartPage = () => {
   const [promoCode, setPromoCode] = useState("");
   const [promoMessage, setPromoMessage] = useState("");
   const [promoApplied, setPromoApplied] = useState(false);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
 
   useEffect(() => {
     if (cart?.discountCodes && cart.discountCodes.length > 0) {
@@ -83,6 +88,15 @@ const CartPage = () => {
     } catch (error) {
       console.log(error);
     }
+  };
+
+  const handleProceedToCheckout = () => {
+    if (!isAuth) {
+      navigate("/login", { state: { from: location } });
+      return;
+    }
+
+    setIsCheckoutModalOpen(true);
   };
 
   return (
@@ -221,7 +235,12 @@ const CartPage = () => {
             <Link to="/products" className="button__continue-shopping">
               Continue Shopping
             </Link>
-            <button className="button__checkout">Proceed to Checkout</button>
+            <button
+              className="button__checkout"
+              onClick={handleProceedToCheckout}
+            >
+              Proceed to Checkout
+            </button>
           </div>
         </>
       ) : (
@@ -230,6 +249,33 @@ const CartPage = () => {
           <Link to="/products" className="button__continue-shopping">
             Continue Shopping
           </Link>
+        </div>
+      )}
+
+      {isCheckoutModalOpen && (
+        <div
+          className="checkout-modal-overlay"
+          onClick={() => setIsCheckoutModalOpen(false)}
+        >
+          <div
+            className="checkout-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="checkout-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="checkout-modal-title">Checkout</h3>
+            <p>This part is under construction.</p>
+            <div className="checkout-modal-actions">
+              <button
+                type="button"
+                className="checkout-modal-close"
+                onClick={() => setIsCheckoutModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

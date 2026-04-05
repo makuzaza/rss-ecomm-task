@@ -4,7 +4,6 @@ import { useAuth } from "@/context/AuthContext";
 import { SearchInput } from "../search/SearchInput";
 import CategoryDropdown from "../products/ProductCategory/CategoryDropdown";
 import { FaBars, FaTimes, FaSearch, FaShoppingBasket } from "react-icons/fa";
-import { ClickOutsideEvent } from "@/@types/interfaces";
 import { useCart } from "@/context/CartContext";
 
 import "./Header.css";
@@ -27,8 +26,9 @@ export const Header = () => {
   };
 
   useEffect(() => {
-    const handleClickOutside = (event: ClickOutsideEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target;
+      if (menuRef.current && target instanceof Node && !menuRef.current.contains(target)) {
         setIsMobileMenuOpen(false);
       }
     };
@@ -126,7 +126,7 @@ export const Header = () => {
           {isAuth ? (
             <>
               <span className="welcome-message">
-                Welcome, {customer.firstName}!
+                Welcome, {customer?.firstName}!
               </span>
               <button onClick={logout} className="auth-button logout-button">
                 Logout
@@ -196,8 +196,8 @@ export const Header = () => {
               <li className="mobile-nav-item">
                 {isAuth ? (
                   <button
-                    onClick={() => {
-                      logout();
+                    onClick={async () => {
+                      await logout();
                       toggleMobileMenu();
                     }}
                     className="mobile-auth-button"

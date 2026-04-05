@@ -213,24 +213,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = useCallback(async () => {
     const token = localStorage.getItem("accessToken");
 
-    try {
-      if (token && cart && cart.discountCodes.length > 0) {
-        await removeAllDiscountCodes();
-      }
-    } catch (err) {
-      console.warn("Failed to remove discount codes during logout", err);
-    }
+    await apiClient.logout();
 
     localStorage.removeItem("accessToken");
     localStorage.removeItem("customerCartId");
     setCustomer(null);
     setToken(null);
 
-    //  Redirect to anonymous client
-    apiClient.initAnonymousClient();
-
     //  Clean cart and create a new one
-    await removeAllDiscountCodes();
     await clearCart(); 
     await reloadCart();
 
@@ -282,7 +272,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await loginWithToken(token);
     } catch (err) {
       console.error("Token refresh failed:", err);
-      logout();
+      await logout();
     } finally {
       setLoading(false);
     }

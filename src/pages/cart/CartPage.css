@@ -106,10 +106,11 @@
   background-color: #8c8b8b;
 }
 
-.cart-page > div:last-child {
+.cart-actions {
   display: flex;
   gap: 10px;
   margin-top: 20px;
+  align-items: center;
 }
 
 .empty-cart {
@@ -117,6 +118,7 @@
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: 15px;
 }
 
 .quantity-controls {
@@ -213,6 +215,72 @@
   color: red;
 }
 
+.checkout-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.checkout-modal {
+  width: 100%;
+  max-width: 420px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.22);
+  padding: 24px;
+  text-align: center;
+  animation: checkoutModalIn 0.2s ease-out;
+}
+
+.checkout-modal h3 {
+  margin: 0 0 8px;
+  font-size: 1.4rem;
+  color: #2a2a2a;
+}
+
+.checkout-modal p {
+  margin: 0;
+  color: #5d5d5d;
+}
+
+.checkout-modal-actions {
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+}
+
+.checkout-modal-close {
+  border: none;
+  border-radius: 8px;
+  background: #4caf50;
+  color: #fff;
+  padding: 10px 20px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.checkout-modal-close:hover {
+  background: #3f9243;
+}
+
+@keyframes checkoutModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media screen and (max-width: 500px) {
   .cart-page {
     padding: 0;
@@ -242,5 +310,9 @@
 
   .promo-code-input input {
     width: 100%;
+  }
+
+  .checkout-modal {
+    padding: 20px;
   }
 }

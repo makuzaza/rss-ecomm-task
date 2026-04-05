@@ -64,9 +64,13 @@ export interface AuthContextType {
   isAuth: boolean;
   customer: Customer | null;
   token: string | null;
-  login: (email: string, password: string) => Promise<Customer>;
+  login: (
+    email: string,
+    password: string,
+    options?: { preventRedirect?: boolean },
+  ) => Promise<Customer>;
   loginWithToken: (token: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   register: (customerData: MyCustomerDraft) => Promise<Customer>;
   loading: boolean;
   error: string | null;
@@ -189,9 +193,9 @@ export interface CartContextType {
   cartCount: number;
   clearCart: () => void;
   updateQuantity?: (id: string, newQuantity: number) => void;
-  incrementQuantity?: (id: string) => void;
-  decrementQuantity?: (id: string) => void;
-  reloadCart?: () => Promise<void>;
+  incrementQuantity: (id: string) => void;
+  decrementQuantity: (id: string) => void;
+  reloadCart: () => Promise<void>;
   removeLineItem?: (lineItemId: string) => Promise<void>;
   clearEntireCart?: () => Promise<void>;
   totalItems?: number;

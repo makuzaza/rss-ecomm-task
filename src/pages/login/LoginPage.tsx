@@ -3,18 +3,27 @@ import { validateEmail, validatePassword } from "@/utils/loginValidation";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { useAuth } from "@/context/AuthContext";
 import { MdError } from "react-icons/md";
-import { useNavigate, Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import "./LoginPage.css";
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuth, login, error: authError } = useAuth();
+  const locationState = location.state as {
+    from?: { pathname?: string; search?: string };
+  } | null;
+
+  const fromPath =
+    locationState?.from
+      ? `${locationState.from.pathname || ""}${locationState.from.search || ""}`
+      : "/";
 
   useEffect(() => {
     if (isAuth) {
-      navigate("/");
+      navigate(fromPath, { replace: true });
     }
-  }, [isAuth, navigate]);
+  }, [fromPath, isAuth, navigate]);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -67,7 +76,10 @@ const Login = () => {
     }
 
     try {
-      await login(formData.email, formData.password);
+      await login(formData.email, formData.password, {
+        preventRedirect: true,
+      });
+      navigate(fromPath, { replace: true });
     } catch (err) {
       console.log(err);
     }
