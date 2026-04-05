@@ -106,15 +106,6 @@ const AboutPage = () => {
             </div>
           ))}
         </div>
-        <div className="logo-wrapper">
-          <a
-            href="https://rs.school/courses/javascript"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <img src={rsschoolLogo} alt="RS School Logo" className="rss-logo" />
-          </a>
-        </div>
       </section>
     </div>
   );

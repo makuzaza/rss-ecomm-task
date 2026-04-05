@@ -5,7 +5,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 const app = express();
-const port = Number(process.env.MOCK_AUTH_PORT || 4000);
+const port = Number(process.env.PORT || process.env.MOCK_AUTH_PORT || 4000);
 
 const mongoUri = process.env.MONGODB_URI;
 const jwtSecret = process.env.MOCK_AUTH_JWT_SECRET || "mock-auth-dev-secret";
@@ -13,11 +13,16 @@ const tokenExpirySeconds = 60 * 60 * 24;
 
 if (!mongoUri) {
   console.error("MONGODB_URI is not set.");
+  console.error("Set MONGODB_URI in your Render service Environment variables.");
   process.exit(1);
 }
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+
+app.get("/", (req, res) => {
+  res.status(200).json({ status: "ok", service: "mock-auth-server" });
+});
 
 const addressSchema = new mongoose.Schema(
   {
@@ -349,6 +354,7 @@ mongoose
   .connect(mongoUri)
   .then(() => {
     app.listen(port, () => {
+      console.error(`Mock auth server listening on port ${port}`);
     });
   })
   .catch((err) => {
