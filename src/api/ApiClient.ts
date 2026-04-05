@@ -65,8 +65,11 @@ type MockCustomerRecord = {
 };
 
 const MOCK_MODE = process.env.REACT_APP_USE_MOCK_DATA === "true";
+const USE_MOCK_AUTH_DB = process.env.REACT_APP_USE_MOCK_AUTH_DB === "true";
+const MOCK_AUTH_API_URL = process.env.REACT_APP_MOCK_AUTH_API_URL || "";
 const MOCK_USERS_STORAGE_KEY = "mockUsers";
 const MOCK_CURRENT_CUSTOMER_KEY = "mockCurrentCustomer";
+
 export class ApiClient extends CreateApiClient {
   constructor() {
     super();
@@ -77,6 +80,118 @@ export class ApiClient extends CreateApiClient {
 
   public isMockMode(): boolean {
     return MOCK_MODE;
+  }
+
+  private isMockDbAuthEnabled(): boolean {
+    return MOCK_MODE && USE_MOCK_AUTH_DB && Boolean(MOCK_AUTH_API_URL);
+  }
+
+  private async requestMockAuth<T>(
+    path: string,
+    options: RequestInit = {},
+  ): Promise<T> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(options.headers as Record<string, string>),
+    };
+
+    const response = await fetch(`${MOCK_AUTH_API_URL}${path}`, {
+      ...options,
+      headers,
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.message || "Mock auth request failed");
+    }
+
+    return data as T;
+  }
+
+  private saveMockSessionFromToken(token: string, expirationTime: number): void {
+    const cache: AppTokenStore = { token, expirationTime };
+    localStorage.setItem("accessToken", JSON.stringify(cache));
+  }
+
+  private async saveCartToDb(): Promise<void> {
+    if (!this.isMockDbAuthEnabled()) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        console.error("[saveCartToDb] No token found");
+        return;
+      }
+
+      const tokenData = JSON.parse(token) as AppTokenStore;
+      if (!tokenData.token) {
+        console.error("[saveCartToDb] No token in parsed data");
+        return;
+      }
+
+      const cartData = localStorage.getItem("mockCart");
+      if (!cartData) {
+        console.error("[saveCartToDb] No cart data in localStorage");
+        return;
+      }
+
+      const cart = JSON.parse(cartData);
+
+      const response = await this.requestMockAuth<{ message: string }>(
+        "/auth/save-cart",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${tokenData.token}`,
+          },
+          body: JSON.stringify({ cart }),
+        },
+      );
+    } catch (error) {
+      console.error("[saveCartToDb] Failed to save cart to database:", error);
+    }
+  }
+
+  private async loadCartFromDb(): Promise<void> {
+    if (!this.isMockDbAuthEnabled()) {
+      console.error("[loadCartFromDb] Mock DB auth not enabled");
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("accessToken");
+      if (!token) {
+        console.error("[loadCartFromDb] No token found");
+        return;
+      }
+
+      const tokenData = JSON.parse(token) as AppTokenStore;
+      if (!tokenData.token) {
+        console.error("[loadCartFromDb] No token in parsed data");
+        return;
+      }
+
+      const result = await this.requestMockAuth<{ cart: unknown }>(
+        "/auth/get-cart",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${tokenData.token}`,
+          },
+        },
+      );
+
+      if (result.cart) {
+        localStorage.setItem("mockCart", JSON.stringify(result.cart));
+      } else {
+        console.error("[loadCartFromDb] No cart in response");
+      }
+    } catch (error) {
+      console.error("[loadCartFromDb] Failed to load cart from database:", error);
+    }
   }
 
   private readMockUsers(): MockCustomerRecord[] {
@@ -169,6 +284,25 @@ export class ApiClient extends CreateApiClient {
     password: string,
   ): Promise<Customer> {
     if (MOCK_MODE) {
+      if (this.isMockDbAuthEnabled()) {
+        const result = await this.requestMockAuth<{
+          token: string;
+          expirationTime: number;
+          customer: Customer;
+        }>("/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email, password }),
+        });
+
+        this.saveMockSessionFromToken(result.token, result.expirationTime);
+        localStorage.setItem(MOCK_CURRENT_CUSTOMER_KEY, result.customer.email);
+        
+        // Load cart from database after successful login
+        await this.loadCartFromDb();
+        
+        return result.customer;
+      }
+
       const users = this.readMockUsers();
       const matched = users.find(
         (user) => user.email === email && user.password === password,
@@ -227,6 +361,21 @@ export class ApiClient extends CreateApiClient {
    */
   public async getCustomerWithToken(token: string) {
     if (MOCK_MODE) {
+      if (this.isMockDbAuthEnabled()) {
+        const result = await this.requestMockAuth<{ customer: Customer }>(
+          "/auth/me",
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        localStorage.setItem(MOCK_CURRENT_CUSTOMER_KEY, result.customer.email);
+        return result.customer;
+      }
+
       if (!token?.startsWith("mock-token-")) {
         throw new Error("Failed to fetch customer by token");
       }
@@ -295,6 +444,27 @@ export class ApiClient extends CreateApiClient {
     customerData: MyCustomerDraft,
   ): Promise<CustomerSignInResult> {
     if (MOCK_MODE) {
+      if (this.isMockDbAuthEnabled()) {
+        const result = await this.requestMockAuth<{
+          token: string;
+          expirationTime: number;
+          customer: Customer;
+        }>("/auth/register", {
+          method: "POST",
+          body: JSON.stringify(customerData),
+        });
+
+        this.saveMockSessionFromToken(result.token, result.expirationTime);
+        localStorage.setItem(MOCK_CURRENT_CUSTOMER_KEY, result.customer.email);
+        
+        // Load cart from database after successful registration
+        await this.loadCartFromDb();
+
+        return {
+          customer: result.customer,
+        } as CustomerSignInResult;
+      }
+
       const users = this.readMockUsers();
       const exists = users.some((user) => user.email === customerData.email);
 
@@ -364,8 +534,31 @@ export class ApiClient extends CreateApiClient {
   /**
    * GET CUSTOMER PROFILE
    */
-  public async getCustomerProfile() {
+  public async getCustomerProfile(): Promise<Customer> {
     if (MOCK_MODE) {
+      if (this.isMockDbAuthEnabled()) {
+        const raw = localStorage.getItem("accessToken");
+        const stored = raw ? (JSON.parse(raw) as AppTokenStore) : null;
+        const token = stored?.token;
+
+        if (!token) {
+          throw new Error("Unauthorized action");
+        }
+
+        const result = await this.requestMockAuth<{ customer: Customer }>(
+          "/auth/me",
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        localStorage.setItem(MOCK_CURRENT_CUSTOMER_KEY, result.customer.email);
+        return result.customer;
+      }
+
       const customer = this.getMockCurrentCustomerRecord();
       if (!customer) {
         throw new Error("Unauthorized action");
@@ -387,7 +580,8 @@ export class ApiClient extends CreateApiClient {
         .execute();
       return customer;
     } catch (error) {
-      console.log(error);
+      console.error(error);
+      throw new Error("Failed to fetch customer profile");
     }
   }
 
@@ -414,7 +608,7 @@ export class ApiClient extends CreateApiClient {
         .execute();
       return data;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return {
         limit: args?.limit ?? 0,
         offset: 0,
@@ -449,7 +643,7 @@ export class ApiClient extends CreateApiClient {
       const normalized = productProjectionNormalization(data);
       return { products: normalized, total: data.total ?? normalized.length };
     } catch (error) {
-      console.log(error);
+        console.error(error);
       return { products: [], total: 0 };
     }
   }
@@ -478,7 +672,7 @@ export class ApiClient extends CreateApiClient {
 
       return productDataNormalization(data);
     } catch (error) {
-      console.log(error);
+        console.error(error);
       throw new Error("Product not found");
     }
   }
@@ -592,7 +786,7 @@ export class ApiClient extends CreateApiClient {
         .execute();
       return productSearchNormalization(data) as MyProductsData[];
     } catch (error) {
-      console.log(error);
+      console.error(error);
       return [];
     }
   }
@@ -604,6 +798,30 @@ export class ApiClient extends CreateApiClient {
     updatePayload: MyCustomerUpdate,
   ): Promise<Customer> {
     if (MOCK_MODE) {
+      if (this.isMockDbAuthEnabled()) {
+        const raw = localStorage.getItem("accessToken");
+        const stored = raw ? (JSON.parse(raw) as AppTokenStore) : null;
+        const token = stored?.token;
+
+        if (!token) {
+          throw new Error("Unauthorized action");
+        }
+
+        const result = await this.requestMockAuth<{ customer: Customer }>(
+          "/auth/update",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(updatePayload),
+          },
+        );
+
+        localStorage.setItem(MOCK_CURRENT_CUSTOMER_KEY, result.customer.email);
+        return result.customer;
+      }
+
       const current = this.getMockCurrentCustomerRecord();
       if (!current) throw new Error("Unauthorized action");
 
@@ -681,7 +899,7 @@ export class ApiClient extends CreateApiClient {
 
       return data;
     } catch (error) {
-      console.log(error);
+        console.error(error);
       throw new Error("Failed to update customer");
     }
   }
@@ -692,6 +910,26 @@ export class ApiClient extends CreateApiClient {
     version: number,
   ) {
     if (MOCK_MODE) {
+      if (this.isMockDbAuthEnabled()) {
+        const raw = localStorage.getItem("accessToken");
+        const stored = raw ? (JSON.parse(raw) as AppTokenStore) : null;
+        const token = stored?.token;
+
+        if (!token) {
+          throw new Error("Unauthorized action");
+        }
+
+        await this.requestMockAuth<{ customer: Customer }>("/auth/change-password", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ currentPassword, newPassword, version }),
+        });
+
+        return;
+      }
+
       const current = this.getMockCurrentCustomerRecord();
       if (!current) throw new Error("Unauthorized action");
 
@@ -737,7 +975,7 @@ export class ApiClient extends CreateApiClient {
         .execute();
       return cart;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       throw new Error("Failed to fetch active cart");
     }
   }
@@ -751,10 +989,9 @@ export class ApiClient extends CreateApiClient {
         .carts()
         .get()
         .execute();
-      console.log("All Carts:", cart);
       return cart;
     } catch (error) {
-      console.log(error);
+      console.error(error);
       throw new Error("Failed to fetch active cart");
     }
   }
@@ -822,8 +1059,6 @@ export class ApiClient extends CreateApiClient {
           },
         ],
       };
-
-      console.log("Add to cart payload", JSON.stringify(payload, null, 2));
 
       const updatedCart = await apiRoot
         .withProjectKey({ projectKey: this.PROJECT_KEY })
@@ -1020,7 +1255,12 @@ export class ApiClient extends CreateApiClient {
     }
   }
 
-  public logout() {
+  public async logout() {
+    // Save cart to database before logging out
+    if (MOCK_MODE && this.isMockDbAuthEnabled()) {
+      await this.saveCartToDb();
+    }
+
     localStorage.removeItem("accessToken");
     localStorage.removeItem(MOCK_CURRENT_CUSTOMER_KEY);
 
