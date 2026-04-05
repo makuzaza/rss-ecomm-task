@@ -19,7 +19,14 @@ export function buildPlugins({
   const isProd = mode === "production";
 
   const devLocalEnvPath = "./.env.development.local";
-  const envPath = isDev && fs.existsSync(devLocalEnvPath) ? devLocalEnvPath : "./.env";
+  const prodLocalEnvPath = "./.env.production.local";
+
+  let envPath = "./.env";
+  if (isDev && fs.existsSync(devLocalEnvPath)) {
+    envPath = devLocalEnvPath;
+  } else if (isProd && fs.existsSync(prodLocalEnvPath)) {
+    envPath = prodLocalEnvPath;
+  }
 
   const plugins: Configuration["plugins"] = [
     new HtmlWebpackPlugin({
@@ -28,6 +35,7 @@ export function buildPlugins({
     }),
     new Dotenv({
       path: envPath,
+      systemvars: true,
     }),
   ];
   // if (isDev) {
