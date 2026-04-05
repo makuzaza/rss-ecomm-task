@@ -4,6 +4,15 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error);
+  process.exit(1);
+});
+
 const app = express();
 const port = Number(process.env.PORT || process.env.MOCK_AUTH_PORT || 4000);
 
@@ -16,6 +25,13 @@ if (!mongoUri) {
   console.error("Set MONGODB_URI in your Render service Environment variables.");
   process.exit(1);
 }
+
+console.error("Startup config:", {
+  hasMongoUri: Boolean(mongoUri),
+  hasJwtSecret: Boolean(jwtSecret),
+  port,
+  nodeEnv: process.env.NODE_ENV || "not-set",
+});
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
@@ -351,7 +367,7 @@ app.get("/api/auth/get-cart", auth, async (req, res) => {
 });
 
 mongoose
-  .connect(mongoUri)
+  .connect(mongoUri, { serverSelectionTimeoutMS: 15000 })
   .then(() => {
     app.listen(port, () => {
       console.error(`Mock auth server listening on port ${port}`);
@@ -359,5 +375,6 @@ mongoose
   })
   .catch((err) => {
     console.error("MongoDB connection failed:", err.message);
+    console.error("MongoDB connection error details:", err);
     process.exit(1);
   });
