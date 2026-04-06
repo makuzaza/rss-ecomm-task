@@ -3,6 +3,8 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const path = require("path");
+const fs = require("fs");
 
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled promise rejection:", reason);
@@ -15,6 +17,8 @@ process.on("uncaughtException", (error) => {
 
 const app = express();
 const port = Number(process.env.PORT || process.env.MOCK_AUTH_PORT || 4000);
+const frontendBuildPath = path.resolve(__dirname, "..", "build");
+const indexHtmlPath = path.join(frontendBuildPath, "index.html");
 
 const mongoUri = process.env.MONGODB_URI;
 const jwtSecret = process.env.MOCK_AUTH_JWT_SECRET || "mock-auth-dev-secret";
@@ -36,7 +40,7 @@ console.error("Startup config:", {
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-app.get("/", (req, res) => {
+app.get("/api/health", (req, res) => {
   res.status(200).json({ status: "ok", service: "mock-auth-server" });
 });
 
@@ -364,6 +368,20 @@ app.get("/api/auth/get-cart", auth, async (req, res) => {
     console.error("[get-cart] Error:", err);
     return res.status(500).json({ message: "Failed to retrieve cart" });
   }
+});
+
+app.use(express.static(frontendBuildPath));
+
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    return next();
+  }
+
+  if (fs.existsSync(indexHtmlPath)) {
+    return res.sendFile(indexHtmlPath);
+  }
+
+  return res.status(404).json({ message: "Frontend build not found" });
 });
 
 const RETRY_DELAY_MS = 10000;
